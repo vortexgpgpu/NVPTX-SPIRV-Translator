@@ -2734,6 +2734,18 @@ bool isValidLLVMModule(Module *M, SPIRVErrorLog &ErrorLog) {
   return true;
 }
 
+bool isValidNVPTXModule(Module *M, SPIRVErrorLog &ErrorLog) {
+  if (!M)
+    return false;
+
+  Triple TT(M->getTargetTriple());
+  if (!ErrorLog.checkError(TT.isNVPTX(), SPIRVEC_InvalidTargetTriple,
+                           "Actual target triple is " + M->getTargetTriple()))
+    return false;
+
+  return true;
+}
+
 bool llvm::writeSpirv(Module *M, std::ostream &OS, std::string &ErrMsg) {
   SPIRV::TranslatorOpts DefaultOpts;
   // To preserve old behavior of the translator, let's enable all extensions
@@ -2745,7 +2757,7 @@ bool llvm::writeSpirv(Module *M, std::ostream &OS, std::string &ErrMsg) {
 bool llvm::writeSpirv(Module *M, const SPIRV::TranslatorOpts &Opts,
                       std::ostream &OS, std::string &ErrMsg) {
   std::unique_ptr<SPIRVModule> BM(SPIRVModule::createSPIRVModule(Opts));
-  if (!isValidLLVMModule(M, BM->getErrorLog()))
+  if (!isValidNVPTXModule(M, BM->getErrorLog()))
     return false;
 
   legacy::PassManager PassMgr;
