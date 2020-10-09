@@ -2786,7 +2786,7 @@ bool llvm::regularizeLlvmForSpirv(Module *M, std::string &ErrMsg) {
 bool llvm::regularizeLlvmForSpirv(Module *M, std::string &ErrMsg,
                                   const SPIRV::TranslatorOpts &Opts) {
   std::unique_ptr<SPIRVModule> BM(SPIRVModule::createSPIRVModule());
-  if (!isValidLLVMModule(M, BM->getErrorLog()))
+  if (!isValidNVPTXModule(M, BM->getErrorLog()))
     return false;
 
   legacy::PassManager PassMgr;

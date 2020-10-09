@@ -70,7 +70,7 @@ public:
 
   bool runOnModule(Module &M) override;
   void visit(Module *M);
-  void preprocessOCLMetadata(Module *M, SPIRVMDBuilder *B, SPIRVMDWalker *W);
+  void preprocessNVPTXMetadata(Module *M, SPIRVMDBuilder *B, SPIRVMDWalker *W);
   void preprocessVectorComputeMetadata(Module *M, SPIRVMDBuilder *B,
                                        SPIRVMDWalker *W);
 
@@ -103,9 +103,21 @@ void PreprocessMetadata::visit(Module *M) {
   SPIRVMDBuilder B(*M);
   SPIRVMDWalker W(*M);
 
-  preprocessOCLMetadata(M, &B, &W);
+  preprocessNVPTXMetadata(M, &B, &W);
   preprocessVectorComputeMetadata(M, &B, &W);
 
+  // Add MetaData for SPIR
+  // TODO: modify the magic number
+  B.addNamedMD("opencl.spir.version")
+      .addOp()
+      .add(unsigned(1))
+      .add(unsigned(2))
+      .done();
+  B.addNamedMD("opencl.ocl.version")
+      .addOp()
+      .add(unsigned(1))
+      .add(unsigned(0))
+      .done();
   // Create metadata representing (empty so far) list
   // of OpExecutionMode instructions
   auto EM = B.addNamedMD(kSPIRVMD::ExecutionMode); // !spirv.ExecutionMode = {}
@@ -198,25 +210,16 @@ void PreprocessMetadata::visit(Module *M) {
   }
 }
 
-void PreprocessMetadata::preprocessOCLMetadata(Module *M, SPIRVMDBuilder *B,
-                                               SPIRVMDWalker *W) {
-  unsigned CLVer = getOCLVersion(M, true);
-  if (CLVer == 0)
-    return;
-  // Preprocess OpenCL-specific metadata
-  // !spirv.Source = !{!x}
-  // !{x} = !{i32 3, i32 102000}
-  B->addNamedMD(kSPIRVMD::Source)
-      .addOp()
-      .add(CLVer == kOCLVer::CL21 ? spv::SourceLanguageOpenCL_CPP
-                                  : spv::SourceLanguageOpenCL_C)
-      .add(CLVer)
-      .done();
-  if (EraseOCLMD)
-    B->eraseNamedMD(kSPIR2MD::OCLVer).eraseNamedMD(kSPIR2MD::SPIRVer);
+
+void PreprocessMetadata::preprocessNVPTXMetadata(Module *M, SPIRVMDBuilder *B,
+                                                 SPIRVMDWalker *W) {
+  // Preprocess NVPTX-specific metadata
+  // !nvvmir.version = !{!x}
+  // !{x} = !{i32 1, i32 4}
+  B->eraseNamedMD("nvvmir.version");
 
   // !spirv.MemoryModel = !{!x}
-  // !{x} = !{i32 1, i32 2}
+  // !{x} = !{i32 1, i32
   Triple TT(M->getTargetTriple());
   assert(isSupportedTriple(TT) && "Invalid triple");
   B->addNamedMD(kSPIRVMD::MemoryModel)
@@ -231,6 +234,7 @@ void PreprocessMetadata::preprocessOCLMetadata(Module *M, SPIRVMDBuilder *B,
   // !x = {!"cl_khr_..."}
   // !y = {!"cl_khr_..."}
   auto Exts = getNamedMDAsStringSet(M, kSPIR2MD::Extensions);
+
   if (!Exts.empty()) {
     auto N = B->addNamedMD(kSPIRVMD::SourceExtension);
     for (auto &I : Exts)
@@ -241,6 +245,77 @@ void PreprocessMetadata::preprocessOCLMetadata(Module *M, SPIRVMDBuilder *B,
 
   if (EraseOCLMD)
     B->eraseNamedMD(kSPIR2MD::FPContract);
+  // add kernel_arg_access_qual for kernels
+  // get kernels
+  NamedMDNode *NamedMD = M->getNamedMetadata("nvvm.annotations");
+  std::set<Function *> kernels;
+  if (!NamedMD) {
+    printf("there must be nvvm.annotations!\n");
+    exit(1);
+  }
+  // !nvvm.annotations = !{!3, !4, !5, !4, !6, !6, !6, !6, !7, !7, !6}
+  // !3 = !{void (i32*, i32*, i32*)* @_Z6vecaddPiS_S_, !"kernel", i32 1}
+  for (unsigned I = 0, E = NamedMD->getNumOperands(); I != E; ++I) {
+    MDNode *MD = NamedMD->getOperand(I);
+    if (!MD || MD->getNumOperands() == 0)
+      continue;
+    if (MD->getNumOperands() != 3)
+      continue;
+    Metadata *Op = MD->getOperand(1);
+    if (auto Str = dyn_cast<MDString>(Op)) {
+      if (Str->getString().str() != "kernel")
+        continue;
+      // S = Str->getString().str();
+      Function *F = mdconst::dyn_extract<Function>(MD->getOperand(0));
+      std::cout << F->getName().str() << std::endl;
+      kernels.insert(F);
+
+      // construct kernel_arg_access_qual
+      std::vector<Metadata *> kernel_arg_access_qual_Vec;
+      auto A = F->arg_begin(), E = F->arg_end();
+      for (unsigned I = 0; A != E; ++I, ++A) {
+        kernel_arg_access_qual_Vec.push_back(MDString::get(*Ctx, "none"));
+      }
+      F->setMetadata("kernel_arg_access_qual",
+                     MDNode::get(*Ctx, kernel_arg_access_qual_Vec));
+      kernel_arg_access_qual_Vec.clear();
+
+      // construct kernel_arg_type
+      std::vector<Metadata *> kernel_arg_type_Vec;
+      A = F->arg_begin();
+      E = F->arg_end();
+      for (unsigned I = 0; A != E; ++I, ++A) {
+        if (!A->getType()->isPointerTy())
+          continue;
+        if (A->getType()->isFloatingPointTy())
+          kernel_arg_type_Vec.push_back(MDString::get(*Ctx, "float*"));
+        else
+          kernel_arg_type_Vec.push_back(MDString::get(*Ctx, "int*"));
+      }
+      F->setMetadata("kernel_arg_type", MDNode::get(*Ctx, kernel_arg_type_Vec));
+      kernel_arg_type_Vec.clear();
+
+      // construct kernel_arg_addr_space
+      std::vector<Metadata *> kernel_arg_addr_space_Vec;
+      A = F->arg_begin();
+      E = F->arg_end();
+      for (unsigned I = 0; A != E; ++I, ++A) {
+        kernel_arg_addr_space_Vec.push_back(ConstantAsMetadata::get(
+            ConstantInt::get(Type::getInt32Ty(*Ctx), 1)));
+      }
+      F->setMetadata("kernel_arg_addr_space",
+                     MDNode::get(*Ctx, kernel_arg_addr_space_Vec));
+      kernel_arg_addr_space_Vec.clear();
+
+      // makr this Function as KERNEL
+      F->setCallingConv(CallingConv::SPIR_KERNEL);
+    }
+  }
+  for (Function &F : *M) {
+    if (kernels.find(&F) != kernels.end()) {
+      std::cout << F.getName().str() << std::endl;
+    }
+  }
 }
 
 void PreprocessMetadata::preprocessVectorComputeMetadata(Module *M,
