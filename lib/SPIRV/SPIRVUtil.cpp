@@ -473,6 +473,31 @@ bool isNonMangledOCLBuiltin(const StringRef &Name) {
 
 bool oclIsBuiltin(const StringRef &Name, std::string *DemangledName,
                   bool IsCpp) {
+  if (Name.startswith("llvm.nvvm.read.ptx.sreg.tid")) {
+    if (DemangledName)
+      *DemangledName = "get_local_id";
+    return true;
+  }
+  if (Name.startswith("llvm.nvvm.read.ptx.sreg.ntid")) {
+    if (DemangledName)
+      *DemangledName = "get_local_size";
+    return true;
+  }
+  if (Name.startswith("llvm.nvvm.read.ptx.sreg.ctaid")) {
+    if (DemangledName)
+      *DemangledName = "get_group_id";
+    return true;
+  }
+  if (Name.startswith("llvm.nvvm.read.ptx.sreg.nctaid")) {
+    if (DemangledName)
+      *DemangledName = "get_num_groups";
+    return true;
+  }
+  if (Name.startswith("llvm.nvvm.barrier0")) {
+    if (DemangledName)
+      *DemangledName = "barrier";
+    return true;
+  }
   if (Name == "printf") {
     if (DemangledName)
       *DemangledName = Name;

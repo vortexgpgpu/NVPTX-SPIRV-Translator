@@ -285,12 +285,17 @@ void PreprocessMetadata::preprocessNVPTXMetadata(Module *M, SPIRVMDBuilder *B,
       A = F->arg_begin();
       E = F->arg_end();
       for (unsigned I = 0; A != E; ++I, ++A) {
-        if (!A->getType()->isPointerTy())
-          continue;
-        if (A->getType()->isFloatingPointTy())
-          kernel_arg_type_Vec.push_back(MDString::get(*Ctx, "float*"));
-        else
-          kernel_arg_type_Vec.push_back(MDString::get(*Ctx, "int*"));
+        if (A->getType()->isPointerTy()) {
+          if (A->getType()->isFloatingPointTy())
+            kernel_arg_type_Vec.push_back(MDString::get(*Ctx, "float*"));
+          else
+            kernel_arg_type_Vec.push_back(MDString::get(*Ctx, "int*"));
+        } else {
+          if (A->getType()->isFloatTy())
+            kernel_arg_type_Vec.push_back(MDString::get(*Ctx, "float"));
+          if (A->getType()->isIntegerTy())
+            kernel_arg_type_Vec.push_back(MDString::get(*Ctx, "int"));
+        }
       }
       F->setMetadata("kernel_arg_type", MDNode::get(*Ctx, kernel_arg_type_Vec));
       kernel_arg_type_Vec.clear();
@@ -300,8 +305,12 @@ void PreprocessMetadata::preprocessNVPTXMetadata(Module *M, SPIRVMDBuilder *B,
       A = F->arg_begin();
       E = F->arg_end();
       for (unsigned I = 0; A != E; ++I, ++A) {
-        kernel_arg_addr_space_Vec.push_back(ConstantAsMetadata::get(
-            ConstantInt::get(Type::getInt32Ty(*Ctx), 1)));
+        if (A->getType()->isPointerTy())
+          kernel_arg_addr_space_Vec.push_back(ConstantAsMetadata::get(
+              ConstantInt::get(Type::getInt32Ty(*Ctx), 1)));
+        else
+          kernel_arg_addr_space_Vec.push_back(ConstantAsMetadata::get(
+              ConstantInt::get(Type::getInt32Ty(*Ctx), 0)));
       }
       F->setMetadata("kernel_arg_addr_space",
                      MDNode::get(*Ctx, kernel_arg_addr_space_Vec));
@@ -309,11 +318,6 @@ void PreprocessMetadata::preprocessNVPTXMetadata(Module *M, SPIRVMDBuilder *B,
 
       // makr this Function as KERNEL
       F->setCallingConv(CallingConv::SPIR_KERNEL);
-    }
-  }
-  for (Function &F : *M) {
-    if (kernels.find(&F) != kernels.end()) {
-      std::cout << F.getName().str() << std::endl;
     }
   }
 }
