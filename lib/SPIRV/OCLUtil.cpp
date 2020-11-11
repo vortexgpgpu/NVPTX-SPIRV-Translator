@@ -148,7 +148,8 @@ bool isComputeAtomicOCLBuiltin(StringRef DemangledName) {
 
 BarrierLiterals getBarrierLiterals(CallInst *CI) {
   auto N = CI->getNumArgOperands();
-  assert(N == 1 || N == 2);
+  // NVPTX's barrier does not have argument
+  assert(N == 0);
 
   std::string DemangledName;
   assert(CI->getCalledFunction() && "Unexpected indirect call");
@@ -161,11 +162,10 @@ BarrierLiterals getBarrierLiterals(CallInst *CI) {
   if (DemangledName == kOCLBuiltinName::SubGroupBarrier) {
     Scope = OCLMS_sub_group;
   }
-
-  return std::make_tuple(getArgAsInt(CI, 0),
-                         N == 1 ? OCLMS_work_group
-                                : static_cast<OCLScopeKind>(getArgAsInt(CI, 1)),
-                         Scope);
+  // (TODO): if it is barrier(CLK_GLOBAL_MEM_FENCE), then 2
+  // if CLK_LOCAL_MEM_FENCE, then 1
+  int fence_level = 3; // CLK_GLOBAL_MEM_FENCE|CLK_LOCAL_MEM_FENCE
+  return std::make_tuple(fence_level, OCLMS_work_group, Scope);
 }
 
 unsigned getExtOp(StringRef OrigName, const std::string &GivenDemangledName) {
