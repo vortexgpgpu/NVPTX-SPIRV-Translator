@@ -777,13 +777,21 @@ SPIRVInstruction *LLVMToSPIRV::transCmpInst(CmpInst *Cmp, SPIRVBasicBlock *BB) {
 SPIRV::SPIRVInstruction *LLVMToSPIRV::transUnaryInst(UnaryInstruction *U,
                                                      SPIRVBasicBlock *BB) {
   Op BOC = OpNop;
+  enum NVPTXAddressSpace {
+    Generic,
+    Global,
+    Internal,
+    Shared,
+    Constant,
+    Local,
+  };
   if (auto Cast = dyn_cast<AddrSpaceCastInst>(U)) {
-    if (Cast->getDestTy()->getPointerAddressSpace() == SPIRAS_Generic) {
-      assert(Cast->getSrcTy()->getPointerAddressSpace() != SPIRAS_Constant &&
+    if (Cast->getDestTy()->getPointerAddressSpace() == Generic) {
+      assert(Cast->getSrcTy()->getPointerAddressSpace() != Constant &&
              "Casts from constant address space to generic are illegal");
       BOC = OpPtrCastToGeneric;
     } else {
-      assert(Cast->getDestTy()->getPointerAddressSpace() != SPIRAS_Constant &&
+      assert(Cast->getDestTy()->getPointerAddressSpace() != Constant &&
              "Casts from generic address space to constant are illegal");
       assert(Cast->getSrcTy()->getPointerAddressSpace() == SPIRAS_Generic);
       BOC = OpGenericCastToPtr;
