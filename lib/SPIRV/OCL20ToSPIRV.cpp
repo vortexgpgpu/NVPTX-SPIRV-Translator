@@ -80,6 +80,8 @@ public:
     AU.addRequired<OCLTypeToSPIRV>();
   }
 
+  virtual void visitAtomicRMWInst(AtomicRMWInst &ARMWI);
+
   virtual void visitCallInst(CallInst &CI);
 
   /// Transform barrier/work_group_barrier/sub_group_barrier
@@ -371,6 +373,39 @@ bool OCL20ToSPIRV::runOnModule(Module &Module) {
     LLVM_DEBUG(errs() << "Fails to verify module: " << ErrorOS.str());
   }
   return true;
+}
+
+void OCL20ToSPIRV::visitAtomicRMWInst(AtomicRMWInst &ARMWI) {
+    SmallVector<Value *, 16> Args;
+    Args.push_back(ARMWI.getPointerOperand());
+    Args.push_back(ARMWI.getValOperand());
+    FunctionType *FT =
+        FunctionType::get(ARMWI.getType(), getTypes(Args), false /*isVarArg*/);
+    // TODO: remove this hard code function name
+    std::string lib_func_name = "";
+    if (ARMWI.getOperation() == llvm::AtomicRMWInst::BinOp::Add) {
+      lib_func_name = "_Z10atomic_addPU8CLglobalVii";
+    } else if (ARMWI.getOperation() == llvm::AtomicRMWInst::BinOp::Xchg) {
+      lib_func_name = "_Z11atomic_xchgPU8CLglobalVii";
+    } else if (ARMWI.getOperation() == llvm::AtomicRMWInst::BinOp::Max) {
+      lib_func_name = "_Z10atomic_maxPU8CLglobalVii";
+    } else if (ARMWI.getOperation() == llvm::AtomicRMWInst::BinOp::Min) {
+      lib_func_name = "_Z10atomic_minPU8CLglobalVii";
+    } else if (ARMWI.getOperation() == llvm::AtomicRMWInst::BinOp::And) {
+      lib_func_name = "_Z10atomic_andPU8CLglobalVii";
+    } else if (ARMWI.getOperation() == llvm::AtomicRMWInst::BinOp::Or) {
+      lib_func_name = "_Z9atomic_orPU8CLglobalVii";
+    } else if (ARMWI.getOperation() == llvm::AtomicRMWInst::BinOp::Xor) {
+      lib_func_name = "_Z10atomic_xorPU8CLglobalVii";
+    } else {
+      std::cout << "unsupport atomic instruction\n";
+      exit(1);
+    }
+    Function *NewF =
+        Function::Create(FT, GlobalValue::ExternalLinkage, lib_func_name, M);
+    CallInst *NewCall = CallInst::Create(NewF, Args, "", &ARMWI);
+    ARMWI.replaceAllUsesWith(NewCall);
+    ARMWI.eraseFromParent();
 }
 
 // The order of handling OCL builtin functions is important.
