@@ -1691,6 +1691,13 @@ SPIRVValue *LLVMToSPIRV::transIntrinsicInst(IntrinsicInst *II,
     return BM->addExtInst(Ty, BM->getExtInstSetId(SPIRVEIS_OpenCL), ExtOp, Ops,
                           BB);
   }
+  case Intrinsic::sqrt: {
+    SPIRVWord ExtOp = OpenCLLIB::Sqrt;
+    SPIRVType *Ty = transType(II->getType());
+    return BM->addExtInst(Ty, BM->getExtInstSetId(SPIRVEIS_OpenCL), 
+						  ExtOp, {transValue(II->getOperand(0), BB)},
+                          BB);
+  }
   case Intrinsic::fmuladd: {
     // For llvm.fmuladd.* fusion is not guaranteed. If a fused multiply-add
     // is required the corresponding llvm.fma.* intrinsic function should be
