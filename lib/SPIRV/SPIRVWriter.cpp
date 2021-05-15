@@ -1631,6 +1631,7 @@ bool LLVMToSPIRV::isKnownIntrinsic(Intrinsic::ID Id) {
   case Intrinsic::ctlz:
   case Intrinsic::cttz:
   case Intrinsic::fmuladd:
+  case Intrinsic::fabs:
   case Intrinsic::memset:
   case Intrinsic::memcpy:
   case Intrinsic::lifetime_start:
@@ -1689,6 +1690,20 @@ SPIRVValue *LLVMToSPIRV::transIntrinsicInst(IntrinsicInst *II,
     SPIRVType *Ty = transType(II->getType());
     std::vector<SPIRVValue *> Ops(1, transValue(II->getArgOperand(0), BB));
     return BM->addExtInst(Ty, BM->getExtInstSetId(SPIRVEIS_OpenCL), ExtOp, Ops,
+                          BB);
+  }
+  case Intrinsic::log2: {
+    SPIRVWord ExtOp = OpenCLLIB::Log2;
+    SPIRVType *Ty = transType(II->getType());
+    return BM->addExtInst(Ty, BM->getExtInstSetId(SPIRVEIS_OpenCL), 
+						  ExtOp, {transValue(II->getOperand(0), BB)},
+                          BB);
+  }
+  case Intrinsic::fabs: {
+    SPIRVWord ExtOp = OpenCLLIB::Fabs;
+    SPIRVType *Ty = transType(II->getType());
+    return BM->addExtInst(Ty, BM->getExtInstSetId(SPIRVEIS_OpenCL), 
+						  ExtOp, {transValue(II->getOperand(0), BB)},
                           BB);
   }
   case Intrinsic::sqrt: {
