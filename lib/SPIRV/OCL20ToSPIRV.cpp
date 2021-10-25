@@ -1338,7 +1338,7 @@ void OCL20ToSPIRV::transWorkItemBuiltinsToVariables() {
         IsVec ? VectorType::get(I.getReturnType(), 3) : I.getReturnType();
     if (DemangledName == "get_local_id" || DemangledName == "get_group_id" ||
         DemangledName == "get_local_size" || DemangledName == "get_num_groups")
-      GVType = VectorType::get(Type::getInt64Ty(*Ctx), 3);
+      GVType = VectorType::get(Type::getInt32Ty(*Ctx), 3);
     GlobalVariable *BV = nullptr;
     if (BuiltinVarName == "__spirv_BuiltInWorkgroupId") {
       if (!WorkgroupId)
@@ -1382,8 +1382,6 @@ void OCL20ToSPIRV::transWorkItemBuiltinsToVariables() {
           unsigned int idx = I.getName().str().back() - 'x';
           NewValue =
               ExtractElementInst::Create(NewValue, getUInt32(M, idx), "", CI);
-          NewValue = CastInst::CreateIntegerCast(
-              NewValue, Type::getInt32Ty(*Ctx), false, "", CI);
         } else {
           NewValue = ExtractElementInst::Create(NewValue, CI->getArgOperand(0),
                                                 "", CI);
